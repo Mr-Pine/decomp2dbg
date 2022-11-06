@@ -37,7 +37,7 @@ class GDBDecompilerClient(DecompilerClient):
 
     def rebase_addr(self, addr, up=False):
         corrected_addr = addr
-        if self.is_pie or self.gdb_client.base_manually_set:
+        if (self.gdb_client.base_manually_set and self.is_pie) or self.is_pie:
             if up:
                 corrected_addr += self.text_base_addr
             else:
@@ -203,6 +203,9 @@ class DecompilerCommand(gdb.Command):
         parser.add_argument(
             '--base-addr-end', type=lambda x: int(x,0)
         )
+        parser.add_argument(
+            '--no-pie', action="store_true", default=False
+        )
 
         return parser
 
@@ -228,6 +231,9 @@ class DecompilerCommand(gdb.Command):
             self.gdb_client.base_addr_start = args.base_addr_start
             self.gdb_client.base_addr_end = args.base_addr_end
             self.gdb_client.base_manually_set = True
+
+        if args.no_pie:
+            self.gdb_client._is_pie = True
 
         self.gdb_client.name = args.decompiler_name
         connected = self.decompiler.connect(name=args.decompiler_name, host=args.host, port=args.port)
@@ -268,6 +274,7 @@ class GDBClient:
         self.base_manually_set = False
         self.base_addr_start = None
         self.base_addr_end = None
+        self._is_pie = None
 
     def __del__(self):
         del self.cmd_interface
@@ -283,6 +290,9 @@ class GDBClient:
 
     @property
     def is_pie(self):
+        if self._is_pie is not None:
+            return self._is_pie
+
         checksec_status = checksec(get_filepath())
         return checksec_status["PIE"]  # if pie we will have offset instead of abs address.
 
